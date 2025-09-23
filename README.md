@@ -28,7 +28,7 @@ the configuration into the current instance.
 
 To use this provider plugin:
 
-1. Enable experimental plugins in your Traefik configuration:
+1. Enable experimental plugins in your Traefik configuration ("v0.1.0" - check latest version):
     ```yaml
     experimental:
       plugins:
@@ -49,6 +49,9 @@ To use this provider plugin:
             - host: localhost
               apiPort: 8080
               webPort: 5180
+              # if you use HTTPS
+              tls:
+                ignoreInsecure: true
     ```
 
 ## Configuration
@@ -68,11 +71,15 @@ Each endpoint in `endpoints` should include:
 - host: 127.0.0.1
   apiPort: 8080
   webPort: 80
+  # if you use HTTPS
+  tls:
+    ignoreInsecure: true
 ```
 
 * `host`: IP or hostname of the remote Traefik
 * `apiPort`: Port used to fetch `/api/rawdata`
 * `webPort`: Port used for service routing
+* `tls.ignoreInsecure`: should be true, if you use HTTPS between public and private traefik, but need self-signed certs
 
 ## Use Case
 

@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,11 @@ type Endpoint struct {
 	Host string `json:"host"    yaml:"host"    toml:"host"    mapstructure:"host"`
 	API  int    `json:"apiPort" yaml:"apiPort" toml:"apiPort" mapstructure:"apiPort"`
 	WEB  int    `json:"webPort" yaml:"webPort" toml:"webPort" mapstructure:"webPort"`
+	TLS  *TLS   `json:"tls"     yaml:"tls"     toml:"tls"     mapstructure:"tls"`
+}
+
+type TLS struct {
+	IgnoreInsecure bool `json:"ignoreInsecure" yaml:"ignoreInsecure" toml:"ignoreInsecure" mapstructure:"ignoreInsecure"`
 }
 
 type Config struct {
@@ -21,6 +27,8 @@ type Config struct {
 	Endpoints    []Endpoint    `json:"endpoints"    yaml:"endpoints"    toml:"endpoints"    mapstructure:"endpoints"`
 	TLSResolver  *string       `json:"tlsResolver"  yaml:"tlsResolver"  toml:"tlsResolver"  mapstructure:"tlsResolver"`
 }
+
+const defaultPath = "/"
 
 func (c *Config) Validate() error {
 	if c == nil {
@@ -56,29 +64,45 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+func (e Endpoint) buildURI(port int, path string) string {
+	uri := url.URL{
+		Host:   fmt.Sprintf("%s:%d", e.Host, port),
+		Scheme: "http",
+		Path:   path,
+	}
+
+	if e.TLS != nil {
+		uri.Scheme = "https"
+	}
+
+	return uri.String()
+}
+
 func (c *Config) PrepareClients(top context.Context) ([]*Client, error) {
 	ctx, cancel := context.WithTimeout(top, c.ConnTimeout)
 	defer cancel()
 
-	cli := new(http.Client)
 	out := make([]*Client, 0, len(c.Endpoints))
 	for _, endpoint := range c.Endpoints {
+		cli := new(http.Client)
+		if endpoint.TLS != nil && endpoint.TLS.IgnoreInsecure {
+			cli.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402
+			}
+		}
+
 		var err error
 		for _, port := range []int{endpoint.API, endpoint.WEB} {
-			uri := url.URL{
-				Host:   fmt.Sprintf("%s:%d", endpoint.Host, port),
-				Scheme: "http",
-				Path:   "/",
-			}
+			uri := endpoint.buildURI(port, defaultPath)
 
 			var req *http.Request
-			if req, err = http.NewRequestWithContext(ctx, http.MethodGet, uri.String(), nil); err != nil {
-				return nil, fmt.Errorf("could not prepare request(%s): %w", uri.String(), err)
+			if req, err = http.NewRequestWithContext(ctx, http.MethodGet, uri, nil); err != nil {
+				return nil, fmt.Errorf("could not prepare request(%s): %w", uri, err)
 			}
 
 			var res *http.Response
 			if res, err = cli.Do(req); err != nil {
-				return nil, fmt.Errorf("could not call request(%s): %w", uri.String(), err)
+				return nil, fmt.Errorf("could not call request(%s): %w", uri, err)
 			}
 
 			if err = res.Body.Close(); err != nil {

@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Setup go
         uses: actions/setup-go@v5
-        with: { go-version: '1.24.x' }
+        with: { go-version: '1.25.x' }
 
       - name: Check out code
         uses: actions/checkout@v4
@@ -39,12 +39,17 @@ jobs:
 
       - name: Nancy (deps vulnerabilities)
         uses: sonatype-nexus-community/nancy-github-action@main
+        with:
+          githubToken: ${{ github.token }}
+        env:
+          OSSI_USERNAME: ${{ secrets.OSSINDEX_USERNAME }}
+          OSSI_TOKEN: ${{ secrets.OSSINDEX_TOKEN }}
 
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: lint
-    strategy: { matrix: { go: [ '1.24.x' ] } }
+    strategy: { matrix: { go: [ '1.24.x', '1.25.x' ] } }
     steps:
       - name: Setup go
         uses: actions/setup-go@v5
