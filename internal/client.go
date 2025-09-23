@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/traefik/genconf/dynamic"
@@ -34,20 +33,16 @@ func (c *Client) Endpoint() string {
 }
 
 func (c *Client) httpCall(ctx context.Context) (*dynamic.Configuration, error) {
-	uri := url.URL{
-		Scheme: "http",
-		Path:   defaultRawPath,
-		Host:   fmt.Sprintf("%s:%d", c.endpoint.Host, c.endpoint.API),
-	}
+	uri := c.endpoint.buildURI(c.endpoint.API, defaultRawPath)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
-		return nil, fmt.Errorf("could not prepare request for %s: %w", uri.String(), err)
+		return nil, fmt.Errorf("could not prepare request for %s: %w", uri, err)
 	}
 
 	var res *http.Response
 	if res, err = c.Do(req); err != nil {
-		return nil, fmt.Errorf("could not make request for %s: %w", uri.String(), err)
+		return nil, fmt.Errorf("could not make request for %s: %w", uri, err)
 	}
 
 	buf := new(bytes.Buffer)
@@ -55,12 +50,7 @@ func (c *Client) httpCall(ctx context.Context) (*dynamic.Configuration, error) {
 
 	var result dynamic.Configuration
 	if err = json.NewDecoder(tee).Decode(&result.HTTP); err != nil {
-		return nil, fmt.Errorf(
-			"could not decode response for %s: %s: %w",
-			uri.String(),
-			buf.String(),
-			err,
-		)
+		return nil, fmt.Errorf("could not decode response for %s: %s: %w", uri, buf.String(), err)
 	}
 
 	return &result, res.Body.Close()
@@ -96,10 +86,9 @@ func (c *Client) prepareResponse(res *dynamic.Configuration) *dynamic.Configurat
 
 		var servers []dynamic.Server
 		for range service.LoadBalancer.Servers {
-			servers = append(servers, dynamic.Server{URL: (&url.URL{
-				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%d", c.endpoint.Host, c.endpoint.WEB),
-			}).String()})
+			servers = append(servers, dynamic.Server{
+				URL: c.endpoint.buildURI(c.endpoint.WEB, defaultPath),
+			})
 		}
 
 		output.HTTP.Services[name] = &dynamic.Service{

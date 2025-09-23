@@ -88,6 +88,7 @@ func TestProvider(t *testing.T) {
 								Servers: []dynamic.Server{{URL: (&url.URL{
 									Scheme: "http",
 									Host:   addr.String(),
+									Path:   "/",
 								}).String()}},
 							},
 						},

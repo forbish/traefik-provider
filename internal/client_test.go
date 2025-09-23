@@ -121,6 +121,89 @@ func TestClient(t *testing.T) {
 							Servers: []dynamic.Server{{URL: (&url.URL{
 								Scheme: "http",
 								Host:   addr.String(),
+								Path:   defaultPath,
+							}).String()}},
+						},
+					},
+				},
+				Middlewares: map[string]*dynamic.Middleware{
+					"http2https": {RedirectScheme: &dynamic.RedirectScheme{
+						Scheme:    "https",
+						Permanent: true,
+					}},
+				},
+			},
+		}, result)
+	}
+}
+
+func TestClient_tls(t *testing.T) {
+	data, err := os.ReadFile("../fixtures/jaeger-api-rawdata.json")
+	require.NoError(t, err)
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		assert.NoError(t, catchError(w.Write(data)))
+	}))
+
+	addr, ok := srv.Listener.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond*100)
+	defer cancel()
+
+	resolver := "letsencrypt"
+
+	cfg := Config{
+		ConnTimeout:  defaultTestConnTimeout,
+		PollInterval: defaultTestPollInterval,
+		TLSResolver:  &resolver,
+		Endpoints: []Endpoint{{
+			Host: addr.IP.String(),
+			API:  addr.Port,
+			WEB:  addr.Port,
+			TLS:  &TLS{IgnoreInsecure: true},
+		}},
+	}
+
+	cli, err := cfg.PrepareClients(ctx)
+	require.NoError(t, err)
+
+	require.Equal(t, cli[0].Endpoint(), addr.IP.String())
+
+	out := make(chan *dynamic.Configuration, 1)
+	if err = cli[0].FetchRaw(t.Context(), out); err != nil {
+		t.Fatal(err)
+	}
+
+	var result *dynamic.Configuration
+	select {
+	case <-ctx.Done():
+		t.Fatal("no response")
+	case result = <-out:
+		require.NotEmpty(t, result)
+		require.Equal(t, &dynamic.Configuration{
+			HTTP: &dynamic.HTTPConfiguration{
+				Routers: map[string]*dynamic.Router{
+					"whoami-" + addr.IP.String(): {
+						Middlewares: []string{"http2https"},
+						Service:     "whoami-" + addr.IP.String(),
+						Rule:        "Host(`whoami.example.com`)",
+					},
+					"whoami-" + addr.IP.String() + "-secure": {
+						Service: "whoami-" + addr.IP.String(),
+						Rule:    "Host(`whoami.example.com`)",
+						TLS:     &dynamic.RouterTLSConfig{CertResolver: resolver},
+					},
+				},
+				Services: map[string]*dynamic.Service{
+					"whoami-" + addr.IP.String(): {
+						LoadBalancer: &dynamic.ServersLoadBalancer{
+							Servers: []dynamic.Server{{URL: (&url.URL{
+								Scheme: "https",
+								Host:   addr.String(),
+								Path:   defaultPath,
 							}).String()}},
 						},
 					},
