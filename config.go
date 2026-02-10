@@ -28,7 +28,12 @@ type Config struct {
 	*internal.Config `mapstructure:"-"`
 }
 
-func CreateConfig() *Config { return new(Config) }
+func CreateConfig() *Config {
+	return &Config{
+		PollInterval: "5s",
+		ConnTimeout:  "15s",
+	}
+}
 
 func (c *Config) validate() error {
 	if c == nil {
