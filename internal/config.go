@@ -11,10 +11,11 @@ import (
 )
 
 type Endpoint struct {
-	Host string `json:"host"    yaml:"host"    toml:"host"    mapstructure:"host"`
-	API  int    `json:"apiPort" yaml:"apiPort" toml:"apiPort" mapstructure:"apiPort"`
-	WEB  int    `json:"webPort" yaml:"webPort" toml:"webPort" mapstructure:"webPort"`
-	TLS  *TLS   `json:"tls"     yaml:"tls"     toml:"tls"     mapstructure:"tls"`
+	Host       string `json:"host"       yaml:"host"       toml:"host"       mapstructure:"host"`
+	API        int    `json:"apiPort"    yaml:"apiPort"    toml:"apiPort"    mapstructure:"apiPort"`
+	WEB        int    `json:"webPort"    yaml:"webPort"    toml:"webPort"    mapstructure:"webPort"`
+	EntryPoint string `json:"entryPoint" yaml:"entryPoint" toml:"entryPoint" mapstructure:"entryPoint"`
+	TLS        *TLS   `json:"tls"        yaml:"tls"        toml:"tls"        mapstructure:"tls"`
 }
 
 type TLS struct {
@@ -115,6 +116,8 @@ func (c *Config) PrepareClients(top context.Context) ([]*Client, error) {
 			endpoint: endpoint,
 			resolver: c.TLSResolver,
 		})
+
+		out[len(out)-1].entryPointNames = out[len(out)-1].resolveEntryPoints(ctx)
 	}
 
 	return out, nil

@@ -71,19 +71,57 @@ func TestProvider(t *testing.T) {
 			Configuration: &dynamic.Configuration{
 				HTTP: &dynamic.HTTPConfiguration{
 					Routers: map[string]*dynamic.Router{
-						"whoami-" + addr.IP.String(): {
+						"web-whoami-" + addr.IP.String(): {
 							Middlewares: []string{"http2https"},
-							Service:     "whoami-" + addr.IP.String(),
+							Service:     "web-whoami-" + addr.IP.String(),
 							Rule:        "Host(`whoami.example.com`)",
 						},
-						"whoami-" + addr.IP.String() + "-secure": {
-							Service: "whoami-" + addr.IP.String(),
+						"web-whoami-" + addr.IP.String() + "-secure": {
+							Service: "web-whoami-" + addr.IP.String(),
 							Rule:    "Host(`whoami.example.com`)",
+							TLS:     &dynamic.RouterTLSConfig{CertResolver: resolver},
+						},
+						"websecure-whoami-" + addr.IP.String(): {
+							Middlewares: []string{"http2https"},
+							Service:     "websecure-whoami-" + addr.IP.String(),
+							Rule:        "Host(`whoami.example.com`)",
+						},
+						"websecure-whoami-" + addr.IP.String() + "-secure": {
+							Service: "websecure-whoami-" + addr.IP.String(),
+							Rule:    "Host(`whoami.example.com`)",
+							TLS:     &dynamic.RouterTLSConfig{CertResolver: resolver},
+						},
+						"errors-" + addr.IP.String(): {
+							Middlewares: []string{"http2https"},
+							Service:     "errors-" + addr.IP.String(),
+							Rule:        "HostRegexp(`.*`)",
+						},
+						"errors-" + addr.IP.String() + "-secure": {
+							Service: "errors-" + addr.IP.String(),
+							Rule:    "HostRegexp(`.*`)",
 							TLS:     &dynamic.RouterTLSConfig{CertResolver: resolver},
 						},
 					},
 					Services: map[string]*dynamic.Service{
-						"whoami-" + addr.IP.String(): {
+						"web-whoami-" + addr.IP.String(): {
+							LoadBalancer: &dynamic.ServersLoadBalancer{
+								Servers: []dynamic.Server{{URL: (&url.URL{
+									Scheme: "http",
+									Host:   addr.String(),
+									Path:   "/",
+								}).String()}},
+							},
+						},
+						"websecure-whoami-" + addr.IP.String(): {
+							LoadBalancer: &dynamic.ServersLoadBalancer{
+								Servers: []dynamic.Server{{URL: (&url.URL{
+									Scheme: "http",
+									Host:   addr.String(),
+									Path:   "/",
+								}).String()}},
+							},
+						},
+						"errors-" + addr.IP.String(): {
 							LoadBalancer: &dynamic.ServersLoadBalancer{
 								Servers: []dynamic.Server{{URL: (&url.URL{
 									Scheme: "http",
