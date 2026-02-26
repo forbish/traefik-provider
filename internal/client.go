@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/traefik/genconf/dynamic"
@@ -16,11 +18,13 @@ import (
 type Client struct {
 	*http.Client
 
-	endpoint Endpoint
-	resolver *string
+	endpoint        Endpoint
+	resolver        *string
+	entryPointNames []string
 }
 
 const defaultRawPath = "/api/rawdata"
+const entryPointsPath = "/api/entrypoints"
 
 var ErrEmptyResponse = errors.New("received empty response")
 
@@ -63,11 +67,30 @@ func (c *Client) prepareResponse(res *dynamic.Configuration) *dynamic.Configurat
 			continue
 		}
 
-		name := strings.Split(key, "@")[0]
-		name = fmt.Sprintf("%s-%s", name, c.endpoint.Host)
+		if len(c.entryPointNames) > 0 && !c.routerMatchesEntryPoint(item) {
+			continue
+		}
 
-		service, ok := res.HTTP.Services[key]
-		if !ok {
+		parts := strings.Split(key, "@")
+		name := fmt.Sprintf("%s-%s", parts[0], c.endpoint.Host)
+		routerSvc := item.Service
+
+		var service *dynamic.Service
+		if svc, exists := res.HTTP.Services[key]; exists {
+			service = svc
+		}
+		if service == nil {
+			if svc, exists := res.HTTP.Services[routerSvc]; exists {
+				service = svc
+			}
+		}
+		if service == nil && len(parts) > 1 {
+			qualifiedSvc := routerSvc + "@" + parts[1]
+			if svc, exists := res.HTTP.Services[qualifiedSvc]; exists {
+				service = svc
+			}
+		}
+		if service == nil || service.LoadBalancer == nil {
 			continue
 		}
 
@@ -130,4 +153,68 @@ func (c *Client) FetchRaw(ctx context.Context, out chan<- *dynamic.Configuration
 	out <- nil
 
 	return fmt.Errorf("%w (1client:%q)", ErrEmptyResponse, c.endpoint.Host)
+}
+
+func (c *Client) routerMatchesEntryPoint(router *dynamic.Router) bool {
+	for _, ep := range router.EntryPoints {
+		for _, allowed := range c.entryPointNames {
+			if ep == allowed {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+type apiEntryPoint struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+func (c *Client) resolveEntryPoints(ctx context.Context) []string {
+	if c.endpoint.EntryPoint != "" {
+		return []string{c.endpoint.EntryPoint}
+	}
+
+	uri := c.endpoint.buildURI(c.endpoint.API, entryPointsPath)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		log.Printf("could not resolve entrypoints for %s, all routers will be included: %v", c.endpoint.Host, err)
+		return nil
+	}
+
+	res, err := c.Do(req)
+	if err != nil {
+		log.Printf("could not resolve entrypoints for %s, all routers will be included: %v", c.endpoint.Host, err)
+		return nil
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	var entryPoints []apiEntryPoint
+	if err = json.NewDecoder(res.Body).Decode(&entryPoints); err != nil {
+		log.Printf("could not decode entrypoints for %s, all routers will be included: %v", c.endpoint.Host, err)
+		return nil
+	}
+
+	target := strconv.Itoa(c.endpoint.WEB)
+	var matches []string
+	for _, ep := range entryPoints {
+		// address format is ":port" or ":port/protocol"
+		addr := ep.Address
+		if idx := strings.Index(addr, "/"); idx != -1 {
+			addr = addr[:idx]
+		}
+		port := strings.TrimPrefix(addr, ":")
+		if port == target {
+			matches = append(matches, ep.Name)
+		}
+	}
+
+	if len(matches) == 0 {
+		log.Printf("no entrypoints found matching webPort %d on %s, all routers will be included", c.endpoint.WEB, c.endpoint.Host)
+	}
+
+	return matches
 }

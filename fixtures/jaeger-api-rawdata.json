@@ -34,11 +34,39 @@
       "status": "enabled",
       "using": ["traefik"]
     },
-    "whoami@docker": {
+    "web-whoami@docker": {
       "entryPoints": ["web"],
       "service": "whoami",
       "rule": "Host(`whoami.example.com`)",
-      "priority": 21,
+      "priority": 26,
+      "observability": {
+        "accessLogs": true,
+        "metrics": true,
+        "tracing": true,
+        "traceVerbosity": "minimal"
+      },
+      "status": "enabled",
+      "using": ["web"]
+    },
+    "websecure-whoami@docker": {
+      "entryPoints": ["websecure"],
+      "service": "whoami",
+      "rule": "Host(`whoami.example.com`)",
+      "priority": 26,
+      "observability": {
+        "accessLogs": true,
+        "metrics": true,
+        "tracing": true,
+        "traceVerbosity": "minimal"
+      },
+      "status": "enabled",
+      "using": ["websecure"]
+    },
+    "errors@file": {
+      "entryPoints": ["web"],
+      "service": "errors@docker",
+      "rule": "HostRegexp(`.*`)",
+      "priority": 1,
       "observability": {
         "accessLogs": true,
         "metrics": true,
@@ -80,8 +108,19 @@
         "responseForwarding": { "flushInterval": "100ms" }
       },
       "status": "enabled",
-      "usedBy": ["whoami@docker"],
+      "usedBy": ["web-whoami@docker", "websecure-whoami@docker"],
       "serverStatus": { "http://192.168.97.2:80": "UP" }
+    },
+    "errors@docker": {
+      "loadBalancer": {
+        "servers": [{ "url": "http://192.168.97.3:80" }],
+        "strategy": "wrr",
+        "passHostHeader": true,
+        "responseForwarding": { "flushInterval": "100ms" }
+      },
+      "status": "enabled",
+      "usedBy": ["errors@file"],
+      "serverStatus": { "http://192.168.97.3:80": "UP" }
     }
   }
 }

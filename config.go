@@ -9,10 +9,11 @@ import (
 )
 
 type Endpoint struct {
-	Host string `json:"host"    yaml:"host"    toml:"host"    mapstructure:"host"`
-	API  int    `json:"apiPort" yaml:"apiPort" toml:"apiPort" mapstructure:"apiPort"`
-	WEB  int    `json:"webPort" yaml:"webPort" toml:"webPort" mapstructure:"webPort"`
-	TLS  *TLS   `json:"tls"     yaml:"tls"     toml:"tls"     mapstructure:"tls"`
+	Host       string `json:"host"       yaml:"host"       toml:"host"       mapstructure:"host"`
+	API        int    `json:"apiPort"    yaml:"apiPort"    toml:"apiPort"    mapstructure:"apiPort"`
+	WEB        int    `json:"webPort"    yaml:"webPort"    toml:"webPort"    mapstructure:"webPort"`
+	EntryPoint string `json:"entryPoint" yaml:"entryPoint" toml:"entryPoint" mapstructure:"entryPoint"`
+	TLS        *TLS   `json:"tls"        yaml:"tls"        toml:"tls"        mapstructure:"tls"`
 }
 
 type TLS struct {
@@ -76,10 +77,11 @@ func (c *Config) validate() error {
 		}
 
 		c.Config.Endpoints = append(c.Config.Endpoints, internal.Endpoint{
-			Host: endpoint.Host,
-			API:  endpoint.API,
-			WEB:  endpoint.WEB,
-			TLS:  tlsConfig,
+			Host:       endpoint.Host,
+			API:        endpoint.API,
+			WEB:        endpoint.WEB,
+			EntryPoint: endpoint.EntryPoint,
+			TLS:        tlsConfig,
 		})
 	}
 
